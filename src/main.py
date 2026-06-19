@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 from collections import deque
@@ -13,6 +14,7 @@ from PySide6.QtGui import (
     QBrush,
     QLinearGradient,
     QPainterPath,
+    QIcon,
 )
 from PySide6.QtWidgets import (
     QApplication,
@@ -28,7 +30,7 @@ from PySide6.QtWidgets import (
 
 from api import fetch_all_gold
 
-__version__ = "2.3.0"
+__version__ = "2.4.1"
 
 
 # 主题配色 —— 亮色质感金主题
@@ -351,6 +353,14 @@ class GoldWidget(QMainWindow):
         self.setWindowTitle("Gold Pulse · 实时金价")
         self.setMinimumSize(820, 600)
         self.resize(1000, 720)
+
+        # 窗口图标（兼容源码运行与 PyInstaller 打包）
+        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "app.ico")
+        if not os.path.exists(icon_path):
+            base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+            icon_path = os.path.join(base, "assets", "app.ico")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
 
         # 窗口整体背景
         self.setStyleSheet(f"""

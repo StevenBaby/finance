@@ -4,6 +4,8 @@ VERSION := $(shell python -c "import ast; tree=ast.parse(open('src/main.py','r',
 
 build:
 	pyinstaller --onefile --windowed --name finance-$(VERSION) \
+		--icon assets/app.ico \
+		--add-data "assets/app.ico;assets" \
 		src/main.py
 
 clean:
