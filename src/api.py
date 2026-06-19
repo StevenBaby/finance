@@ -160,39 +160,47 @@ def fetch_all_gold() -> dict:
     newyork = _parse_newyork(data.get(CODE_NEWYORK, []))
     shanghai = _parse_shanghai(data.get(CODE_SHANGHAI, []))
 
-    # 折算价锚定：优先纽约金，其次伦敦金
-    implied_cny_g = 0.0
-    implied_source = ""
-    for name, src in [("纽约金", newyork), ("伦敦金", london)]:
-        if src and src["price"] and usdcny:
-            implied_cny_g = _implied_cny_per_gram(src["price"], usdcny)
-            implied_source = name
-            break
+    # 各品种独立折算 CNY/g（用各自价格 × 汇率 ÷ 31.1035）
+    london_implied = (_implied_cny_per_gram(london["price"], usdcny)
+                      if london and london["price"] and usdcny else 0.0)
+    newyork_implied = (_implied_cny_per_gram(newyork["price"], usdcny)
+                       if newyork and newyork["price"] and usdcny else 0.0)
+    # 上海金卡片对比基准：纽约金与伦敦金折算价的平均值
+    implied_vals = [v for v in (newyork_implied, london_implied) if v]
+    implied_cny_g = sum(implied_vals) / len(implied_vals) if implied_vals else 0.0
+    implied_source = "纽约金/伦敦金均值" if len(implied_vals) == 2 else (
+        "纽约金" if newyork_implied else ("伦敦金" if london_implied else ""))
 
-    def _enrich(item: dict | None, is_intl: bool) -> dict | None:
+    def _enrich(item: dict | None, own_implied: float) -> dict | None:
         if not item:
             return None
         diff, pct = _diff_pct(item["price"], item["prev_close"])
         item["diff"] = diff
         item["pct"] = pct
-        if is_intl:
-            # 国际金卡片显示折算 CNY/g
-            item["implied"] = (f"折算 ≈ {implied_cny_g:,.2f} CNY/g"
-                               if implied_cny_g else "")
+        item["implied_cny_g"] = own_implied
+        item["implied"] = (f"折算 ≈ {own_implied:,.2f} CNY/g"
+                           if own_implied else "")
+        return item
+
+    def _enrich_shanghai(item: dict | None) -> dict | None:
+        if not item:
+            return None
+        diff, pct = _diff_pct(item["price"], item["prev_close"])
+        item["diff"] = diff
+        item["pct"] = pct
+        item["implied_cny_g"] = item["price"]
+        if implied_cny_g:
+            basis = item["price"] - implied_cny_g
+            item["implied"] = (f"折算价 {implied_cny_g:,.2f}  基差 {basis:+.2f}")
         else:
-            # 上海金卡片显示折算价对比 + 基差
-            if implied_cny_g:
-                basis = item["price"] - implied_cny_g
-                item["implied"] = (f"折算价 {implied_cny_g:,.2f}  基差 {basis:+.2f}")
-            else:
-                item["implied"] = ""
+            item["implied"] = ""
         return item
 
     return {
         "usdcny": usdcny,
         "implied_cny_g": implied_cny_g,
         "implied_source": implied_source,
-        "london": _enrich(london, is_intl=True),
-        "newyork": _enrich(newyork, is_intl=True),
-        "shanghai": _enrich(shanghai, is_intl=False),
+        "london": _enrich(london, london_implied),
+        "newyork": _enrich(newyork, newyork_implied),
+        "shanghai": _enrich_shanghai(shanghai),
     }

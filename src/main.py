@@ -241,12 +241,24 @@ class SparklineChart(QFrame):
             p.setBrush(QBrush(QColor(s.color)))
             p.setPen(Qt.PenStyle.NoPen)
             p.drawEllipse(pts[-1], 3.5, 3.5)
-            p.setPen(QColor(s.color))
+            # 最新点数值标签：显示在点的正上方，居中，带白色底框防遮挡
+            label = f"{vals[-1]:,.2f}"
             p.setFont(QFont("Microsoft YaHei UI", 8, QFont.Weight.Bold))
+            fm = p.fontMetrics()
+            tw = fm.horizontalAdvance(label)
+            th = fm.height()
+            lx = pts[-1].x() - tw - 6  # 标签整体在点左侧，右边界距点 6px
+            ly = pts[-1].y() - th - 4
+            # 白色圆角底
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(255, 255, 255, 220))
+            p.drawRoundedRect(QRectF(lx - 3, ly, tw + 6, th), 3, 3)
+            # 文字
+            p.setPen(QColor(s.color))
             p.drawText(
-                QRectF(pts[-1].x() + 6, pts[-1].y() - 10, 80, 16),
-                Qt.AlignmentFlag.AlignLeft,
-                f"{vals[-1]:,.2f}",
+                QRectF(lx, ly, tw, th),
+                Qt.AlignmentFlag.AlignCenter,
+                label,
             )
 
 
@@ -337,7 +349,7 @@ class Card(QFrame):
         self, price: str, change_str: str, extra: str, up: bool, implied: str = ""
     ):
         self.price_label.setText(price)
-        color = ACCENT_GREEN if up else ACCENT_RED if up is False else TEXT_SECONDARY
+        color = ACCENT_RED if up else ACCENT_GREEN if up is False else TEXT_SECONDARY
         self.change_label.setText(change_str)
         self.change_label.setStyleSheet(
             f"QLabel#cardChange {{ color: {color}; font-size: 12px; font-weight: bold; }}"
@@ -355,11 +367,13 @@ class GoldWidget(QMainWindow):
         self.resize(1000, 720)
 
         # 窗口图标（兼容源码运行与 PyInstaller 打包）
-        icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "app.ico")
-        if not os.path.exists(icon_path):
-            base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
-            icon_path = os.path.join(base, "assets", "app.ico")
-        if os.path.exists(icon_path):
+        here = os.path.dirname(os.path.abspath(__file__))
+        candidates = [
+            os.path.join(here, "assets", "app.ico"),          # 打包 _MEIPASS / 同级
+            os.path.join(here, "..", "assets", "app.ico"),    # 源码运行（项目根）
+        ]
+        icon_path = next((p for p in candidates if os.path.exists(p)), "")
+        if icon_path:
             self.setWindowIcon(QIcon(icon_path))
 
         # 窗口整体背景
@@ -467,15 +481,17 @@ class GoldWidget(QMainWindow):
             if usdcny:
                 self.usdcny_label.setText(f"USD/CNY {usdcny:.4f}")
 
-            # 伦敦金（走势图用折算 CNY/g）
-            v = self._update_card(self.card_london, result["london"], "昨结")
+            # 伦敦金（走势图用其自身折算 CNY/g）
+            lon = result["london"]
+            v = self._update_card(self.card_london, lon, "昨结")
             if v:
-                self.chart.push("london", implied_cny_g if implied_cny_g else v)
+                self.chart.push("london", lon["implied_cny_g"] or v)
 
-            # 纽约金（走势图用折算 CNY/g）
-            v = self._update_card(self.card_newyork, result["newyork"], "昨收")
+            # 纽约金（走势图用其自身折算 CNY/g）
+            ny = result["newyork"]
+            v = self._update_card(self.card_newyork, ny, "昨收")
             if v:
-                self.chart.push("newyork", implied_cny_g if implied_cny_g else v)
+                self.chart.push("newyork", ny["implied_cny_g"] or v)
 
             # 上海金（走势图用原价 CNY/g）
             sh = result["shanghai"]
