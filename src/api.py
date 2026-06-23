@@ -97,17 +97,35 @@ def _parse_newyork(fields: list[str]) -> dict | None:
 def _parse_shanghai(fields: list[str]) -> dict | None:
     """解析沪金连续 nf_AU0 字段。
 
-    字段顺序: [0]名称 [2]开盘 [3]最高 [4]最低
-             [5]最新 [8]昨收 [10]昨结 [16]日期
+    新浪内盘期货 nf_ 字段顺序（2026-06 实测）:
+        [0]名称 [1]时间(HHMMSS) [2]开盘 [3]最高 [4]最低
+        [5]买一价 [6]最新价 [7]卖一价 [8]昨收
+        [9]最新成交量 [10]昨结 [16]日期
+    注: 最新价取 [6]，[5] 为买一价不能用作最新价。
     """
     if not fields or len(fields) < 11:
         return None
-    price = _safe_float(fields[5])
+    price = _safe_float(fields[6])
+    avg_note = ""
+    if price <= 0:
+        # 最新价缺失时，用买一价 [5] 与卖一价 [7] 的均值兜底
+        bid = _safe_float(fields[5])
+        ask = _safe_float(fields[7])
+        if bid > 0 and ask > 0:
+            price = (bid + ask) / 2
+            avg_note = "（买卖一价均值）"
+        elif bid > 0:
+            price = bid
+            avg_note = "（买一价）"
+        elif ask > 0:
+            price = ask
+            avg_note = "（卖一价）"
     if price <= 0:
         return None
     return {
         "name": fields[0],
         "price": price,
+        "avg_note": avg_note,
         "open": _safe_float(fields[2]),
         "high": _safe_float(fields[3]),
         "low": _safe_float(fields[4]),
@@ -191,9 +209,10 @@ def fetch_all_gold() -> dict:
         item["implied_cny_g"] = item["price"]
         if implied_cny_g:
             basis = item["price"] - implied_cny_g
-            item["implied"] = (f"折算价 {implied_cny_g:,.2f}  基差 {basis:+.2f}")
+            note = f"  {item['avg_note']}" if item.get("avg_note") else ""
+            item["implied"] = (f"折算价 {implied_cny_g:,.2f}  基差 {basis:+.2f}{note}")
         else:
-            item["implied"] = ""
+            item["implied"] = item.get("avg_note", "")
         return item
 
     return {
