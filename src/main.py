@@ -3,7 +3,7 @@ import sys
 import time
 from collections import deque
 
-from PySide6.QtCore import Qt, QTimer, QPointF, QRectF
+from PySide6.QtCore import Qt, QTimer, QPointF, QRectF, QEvent
 from PySide6.QtGui import (
     QFont,
     QColor,
@@ -15,6 +15,7 @@ from PySide6.QtGui import (
     QLinearGradient,
     QPainterPath,
     QIcon,
+    QKeySequence,
 )
 from PySide6.QtWidgets import (
     QApplication,
@@ -44,6 +45,23 @@ ACCENT_RED = "#dc2626"
 TEXT_PRIMARY = "#1f2937"
 TEXT_SECONDARY = "#6b7280"
 BORDER = "#e2e8f0"
+
+
+class SelectableLabel(QLabel):
+    """可选中文字的 QLabel：禁用右键菜单，支持 Ctrl+C 复制选区。"""
+
+    def contextMenuEvent(self, _ev):
+        # 屏蔽默认右键菜单
+        pass
+
+    def keyPressEvent(self, ev):
+        if ev.matches(QKeySequence.StandardKey.Copy):
+            sel = self.textInteractionFlags() & Qt.TextInteractionFlag.TextSelectableByMouse
+            if sel:
+                ctrl = QApplication.clipboard()
+                ctrl.setText(self.selectedText())
+                return
+        super().keyPressEvent(ev)
 
 
 class Series:
@@ -210,14 +228,22 @@ class SparklineChart(QFrame):
                 y = pad_t + plot_h * (1 - (v - vmin) / (vmax - vmin))
                 pts.append(QPointF(x, y))
 
-            # 渐变填充
-            path = QPainterPath()
-            path.moveTo(pts[0])
-            for pt in pts[1:]:
-                path.lineTo(pt)
-            fill = QPainterPath(pts[0])
-            for pt in pts[1:]:
-                fill.lineTo(pt)
+            # 平滑曲线（Catmull-Rom 转三次 Bézier），填充与折线共用
+            smooth = QPainterPath()
+            smooth.moveTo(pts[0])
+            for i in range(len(pts) - 1):
+                p0 = pts[i - 1] if i > 0 else pts[i]
+                p1 = pts[i]
+                p2 = pts[i + 1]
+                p3 = pts[i + 2] if i + 2 < len(pts) else pts[i + 1]
+                c1 = QPointF(p1.x() + (p2.x() - p0.x()) / 6,
+                             p1.y() + (p2.y() - p0.y()) / 6)
+                c2p = QPointF(p2.x() - (p3.x() - p1.x()) / 6,
+                              p2.y() - (p3.y() - p1.y()) / 6)
+                smooth.cubicTo(c1, c2p, p2)
+
+            # 渐变填充（用同一条平滑曲线闭合到底部）
+            fill = QPainterPath(smooth)
             fill.lineTo(QPointF(pts[-1].x(), pad_t + plot_h))
             fill.lineTo(QPointF(pts[0].x(), pad_t + plot_h))
             fill.closeSubpath()
@@ -228,14 +254,49 @@ class SparklineChart(QFrame):
             c2 = QColor(s.color)
             c2.setAlpha(0)
             grad.setColorAt(1, c2)
-            p.fillPath(fill, QBrush(grad))
+            p.setBrush(QBrush(grad))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawPath(fill)
 
             # 折线
             pen = QPen(QColor(s.color), 2)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
             p.setPen(pen)
-            p.drawPath(path)
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawPath(smooth)
+
+            # 数据点 + 数值标签（按间隔采样，避免拥挤）
+            n_pts = len(pts)
+            step = max(1, n_pts // 8)  # 最多约 8 个标记
+            p.setFont(QFont("Microsoft YaHei UI", 8, QFont.Weight.Bold))
+            fm = p.fontMetrics()
+            th = fm.height()
+            for i in range(0, n_pts, step):
+                if i == n_pts - 1:
+                    continue  # 最后一个点由下方"最新点"单独标记
+                pt = pts[i]
+                label = f"{vals[i]:,.2f}"
+                tw = fm.horizontalAdvance(label)
+                # 数据点
+                p.setBrush(QBrush(QColor(s.color)))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.drawEllipse(pt, 3, 3)
+                # 标签：点上方居中，带白色圆角底防遮挡
+                lx = pt.x() - tw / 2
+                ly = pt.y() - th - 4
+                # 防止超出顶部
+                if ly < pad_t:
+                    ly = pt.y() + 4
+                p.setBrush(QColor(255, 255, 255, 220))
+                p.drawRoundedRect(QRectF(lx - 3, ly, tw + 6, th), 3, 3)
+                p.setPen(QColor(s.color))
+                p.drawText(
+                    QRectF(lx, ly, tw, th),
+                    Qt.AlignmentFlag.AlignCenter,
+                    label,
+                )
+                p.setPen(Qt.PenStyle.NoPen)
 
             # 最新点 + 数值
             p.setBrush(QBrush(QColor(s.color)))
@@ -262,8 +323,8 @@ class SparklineChart(QFrame):
             )
 
 
-def _selectable(lbl: QLabel) -> QLabel:
-    """让 QLabel 文字可用鼠标选中复制。"""
+def _selectable(lbl: SelectableLabel) -> SelectableLabel:
+    """让 SelectableLabel 启用鼠标选中复制（已内置：无右键菜单、Ctrl+C 复制）。"""
     lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
     lbl.setCursor(Qt.CursorShape.IBeamCursor)
     return lbl
@@ -283,28 +344,28 @@ class Card(QFrame):
         layout.setContentsMargins(18, 14, 18, 14)
 
         head = QHBoxLayout()
-        self.title_label = _selectable(QLabel(title))
+        self.title_label = _selectable(SelectableLabel(title))
         self.title_label.setObjectName("cardTitle")
         head.addWidget(self.title_label)
         head.addStretch()
-        self.unit_label = _selectable(QLabel(unit))
+        self.unit_label = _selectable(SelectableLabel(unit))
         self.unit_label.setObjectName("cardUnit")
         head.addWidget(self.unit_label)
         layout.addLayout(head)
 
-        self.price_label = _selectable(QLabel("--"))
+        self.price_label = _selectable(SelectableLabel("--"))
         self.price_label.setObjectName("cardPrice")
         layout.addWidget(self.price_label)
 
-        self.change_label = _selectable(QLabel(""))
+        self.change_label = _selectable(SelectableLabel(""))
         self.change_label.setObjectName("cardChange")
         layout.addWidget(self.change_label)
 
-        self.implied_label = _selectable(QLabel(""))
+        self.implied_label = _selectable(SelectableLabel(""))
         self.implied_label.setObjectName("cardImplied")
         layout.addWidget(self.implied_label)
 
-        self.extra_label = _selectable(QLabel(""))
+        self.extra_label = _selectable(SelectableLabel(""))
         self.extra_label.setObjectName("cardExtra")
         layout.addWidget(self.extra_label)
 
@@ -369,7 +430,7 @@ class Card(QFrame):
 class GoldWidget(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Gold Pulse · 实时金价")
+        self.setWindowTitle(f"Gold Pulse · 实时金价v{__version__}")
         self.setMinimumSize(820, 600)
         self.resize(1000, 720)
 
@@ -405,7 +466,7 @@ class GoldWidget(QMainWindow):
         cards_row.setSpacing(12)
         self.card_london = Card("伦敦金 XAU", "USD/oz", accent="#b88200")
         self.card_newyork = Card("纽约金 COMEX", "USD/oz", accent="#0ea5e9")
-        self.card_shanghai = Card("上海金 沪金连续", "CNY/g", accent="#16a34a")
+        self.card_shanghai = Card("上海金 沪金连续", "CNY/g", accent="#dc2626")
         for c in (self.card_london, self.card_newyork, self.card_shanghai):
             cards_row.addWidget(c)
         root.addLayout(cards_row)
@@ -414,7 +475,7 @@ class GoldWidget(QMainWindow):
         self.chart = SparklineChart()
         self.chart.add_series("london", "伦敦金(折算 CNY/g)", "#b88200")
         self.chart.add_series("newyork", "纽约金(折算 CNY/g)", "#0ea5e9")
-        self.chart.add_series("shanghai", "上海金 CNY/g", "#16a34a")
+        self.chart.add_series("shanghai", "上海金 CNY/g", "#dc2626")
         root.addWidget(self.chart, 1)
 
         # 底部状态栏
@@ -433,18 +494,18 @@ class GoldWidget(QMainWindow):
 
     def _build_header(self) -> QHBoxLayout:
         box = QHBoxLayout()
-        title = _selectable(QLabel("GOLD  PULSE"))
+        title = _selectable(SelectableLabel("GOLD  PULSE"))
         title.setStyleSheet(
             f"color: {GOLD_BRIGHT}; font-size: 26px; font-weight: bold; letter-spacing: 4px;"
         )
-        sub = _selectable(QLabel("实时黄金行情 · 三大市场联动"))
+        sub = _selectable(SelectableLabel("实时黄金行情 · 三大市场联动"))
         sub.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 11px;")
         box.addWidget(title)
         box.addSpacing(14)
         box.addWidget(sub)
         box.addStretch()
 
-        self.usdcny_label = _selectable(QLabel("USD/CNY --"))
+        self.usdcny_label = _selectable(SelectableLabel("USD/CNY --"))
         self.usdcny_label.setStyleSheet(
             f"color: {TEXT_PRIMARY}; font-size: 13px; padding: 4px 10px;"
             f"border: 1px solid {BORDER}; border-radius: 6px;"

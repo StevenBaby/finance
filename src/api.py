@@ -210,7 +210,9 @@ def fetch_all_gold() -> dict:
         if implied_cny_g:
             basis = item["price"] - implied_cny_g
             note = f"  {item['avg_note']}" if item.get("avg_note") else ""
-            item["implied"] = (f"折算价 {implied_cny_g:,.2f}  基差 {basis:+.2f}{note}")
+            item["implied"] = (
+                f"折算 ≈ {implied_cny_g:,.2f} CNY/g  基差 {basis:+.2f}{note}"
+            )
         else:
             item["implied"] = item.get("avg_note", "")
         return item
