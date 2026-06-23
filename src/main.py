@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
 
 from api import fetch_all_gold
 
-__version__ = "2.4.1"
+__version__ = "2.4.2"
 
 
 # 主题配色 —— 亮色质感金主题
@@ -262,6 +262,13 @@ class SparklineChart(QFrame):
             )
 
 
+def _selectable(lbl: QLabel) -> QLabel:
+    """让 QLabel 文字可用鼠标选中复制。"""
+    lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+    lbl.setCursor(Qt.CursorShape.IBeamCursor)
+    return lbl
+
+
 class Card(QFrame):
     """单张行情卡片"""
 
@@ -276,28 +283,28 @@ class Card(QFrame):
         layout.setContentsMargins(18, 14, 18, 14)
 
         head = QHBoxLayout()
-        self.title_label = QLabel(title)
+        self.title_label = _selectable(QLabel(title))
         self.title_label.setObjectName("cardTitle")
         head.addWidget(self.title_label)
         head.addStretch()
-        self.unit_label = QLabel(unit)
+        self.unit_label = _selectable(QLabel(unit))
         self.unit_label.setObjectName("cardUnit")
         head.addWidget(self.unit_label)
         layout.addLayout(head)
 
-        self.price_label = QLabel("--")
+        self.price_label = _selectable(QLabel("--"))
         self.price_label.setObjectName("cardPrice")
         layout.addWidget(self.price_label)
 
-        self.change_label = QLabel("")
+        self.change_label = _selectable(QLabel(""))
         self.change_label.setObjectName("cardChange")
         layout.addWidget(self.change_label)
 
-        self.implied_label = QLabel("")
+        self.implied_label = _selectable(QLabel(""))
         self.implied_label.setObjectName("cardImplied")
         layout.addWidget(self.implied_label)
 
-        self.extra_label = QLabel("")
+        self.extra_label = _selectable(QLabel(""))
         self.extra_label.setObjectName("cardExtra")
         layout.addWidget(self.extra_label)
 
@@ -426,18 +433,18 @@ class GoldWidget(QMainWindow):
 
     def _build_header(self) -> QHBoxLayout:
         box = QHBoxLayout()
-        title = QLabel("GOLD  PULSE")
+        title = _selectable(QLabel("GOLD  PULSE"))
         title.setStyleSheet(
             f"color: {GOLD_BRIGHT}; font-size: 26px; font-weight: bold; letter-spacing: 4px;"
         )
-        sub = QLabel("实时黄金行情 · 三大市场联动")
+        sub = _selectable(QLabel("实时黄金行情 · 三大市场联动"))
         sub.setStyleSheet(f"color: {TEXT_SECONDARY}; font-size: 11px;")
         box.addWidget(title)
         box.addSpacing(14)
         box.addWidget(sub)
         box.addStretch()
 
-        self.usdcny_label = QLabel("USD/CNY --")
+        self.usdcny_label = _selectable(QLabel("USD/CNY --"))
         self.usdcny_label.setStyleSheet(
             f"color: {TEXT_PRIMARY}; font-size: 13px; padding: 4px 10px;"
             f"border: 1px solid {BORDER}; border-radius: 6px;"
