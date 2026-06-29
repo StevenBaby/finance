@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gold Pulse · 实时金价 v3.0</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="container">
+
+  <header class="header">
+    <h1>GOLD&nbsp;&nbsp;PULSE</h1>
+    <span class="subtitle">实时黄金行情 · 三大市场联动</span>
+    <span class="usdcny-badge" id="usdcny">USD/CNY --</span>
+  </header>
+
+  <div class="cards">
+    <div class="card london">
+      <div class="card-head">
+        <span class="card-title">伦敦金 XAU</span>
+        <span class="card-unit">USD/oz</span>
+      </div>
+      <div class="card-price" id="lon-price">--</div>
+      <div class="card-change neut" id="lon-change"></div>
+      <div class="card-implied" id="lon-implied"></div>
+      <div class="card-extra" id="lon-extra"></div>
+    </div>
+
+    <div class="card newyork">
+      <div class="card-head">
+        <span class="card-title">纽约金 COMEX</span>
+        <span class="card-unit">USD/oz</span>
+      </div>
+      <div class="card-price" id="ny-price">--</div>
+      <div class="card-change neut" id="ny-change"></div>
+      <div class="card-implied" id="ny-implied"></div>
+      <div class="card-extra" id="ny-extra"></div>
+    </div>
+
+    <div class="card shanghai">
+      <div class="card-head">
+        <span class="card-title">上海金 沪金连续</span>
+        <span class="card-unit">CNY/g</span>
+      </div>
+      <div class="card-price" id="sh-price">--</div>
+      <div class="card-change neut" id="sh-change"></div>
+      <div class="card-implied" id="sh-implied"></div>
+      <div class="card-extra" id="sh-extra"></div>
+    </div>
+  </div>
+
+  <div class="chart-wrapper">
+    <div id="chart"></div>
+  </div>
+
+  <div class="status" id="status">● 连接中...</div>
+</div>
+
+<script src="/static/echarts.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>
